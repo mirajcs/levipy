@@ -108,4 +108,3 @@ class CovariantDerivative:
 
     def __repr__(self):
         return f"CovariantDerivative(dim={self.n})"
-

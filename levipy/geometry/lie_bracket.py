@@ -3,7 +3,6 @@ Lie bracket of two vector fields.
 
 [X, Y]^k = X^i ∂_i Y^k − Y^i ∂_i X^k
 """
-
 from __future__ import annotations
 
 from typing import List
