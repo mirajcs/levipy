@@ -1,0 +1,10 @@
+name = "LevyPy"
+version = "0.1.0"
+defaultTargets = ["levypy"]
+
+[[lean_lib]]
+name = "LevyPy"
+
+[[lean_exe]]
+name = "levypy"
+root = "Main"
