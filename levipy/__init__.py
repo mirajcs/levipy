@@ -21,7 +21,7 @@ from levipy.geometry.lie_bracket import lie_bracket
 from levipy.geometry.manifold import Manifold
 from levipy.gr.geodesic import GeodesicEquations
 from levipy.gr.parallel import ParallelTransport
-from levipy.lean4 import MathlibLinker, SymPyToLean4, TheoremBuilder
+# from levipy.lean4 import MathlibLinker, SymPyToLean4, TheoremBuilder
 from levipy.tensors.christoffel import ChristoffelSymbols
 from levipy.tensors.einstein import EinsteinTensor
 from levipy.tensors.metric import MetricTensor
