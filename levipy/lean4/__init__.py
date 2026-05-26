@@ -12,7 +12,7 @@ Quick usage
 >>> from levipy import Manifold
 >>> from levipy.lean4 import TheoremBuilder
 >>> import sympy as sp
->>> th, ph = sp.symbols('theta phi', real=True)
+>>> th, ph = sp.symbols('θ φ', real=True)
 >>> M = Manifold('S2', [th, ph])
 >>> g = M.metric([[1, 0], [0, sp.sin(th)**2]])
 >>> builder = TheoremBuilder(g, manifold_name='Sphere2',

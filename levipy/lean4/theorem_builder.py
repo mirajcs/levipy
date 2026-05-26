@@ -57,12 +57,15 @@ class TheoremBuilder:
         Name used in Lean definitions (e.g. 'Sphere2', 'Schwarzschild').
     extra_hypotheses : list of str, optional
         Extra Lean hypotheses to add, e.g. ['(hr : 0 < r)', '(hth : 0 < θ)'].
+        These must reference the coordinates by their SymPy names — name your
+        symbols in Greek (e.g. ``sp.symbols('θ φ')``) if you want Greek
+        identifiers in the generated Lean.
 
     Examples
     --------
     >>> import sympy as sp
     >>> from levipy import Manifold
-    >>> th, ph = sp.symbols('theta phi', real=True)
+    >>> th, ph = sp.symbols('θ φ', real=True)
     >>> M = Manifold('S2', [th, ph])
     >>> g = M.metric([[1, 0], [0, sp.sin(th)**2]])
     >>> builder = TheoremBuilder(g, manifold_name='Sphere2',
@@ -83,6 +86,38 @@ class TheoremBuilder:
         self.n = metric.n
         self._translator = SymPyToLean4(real_vars=[str(c) for c in self.coords])
         self._ch = metric.christoffel()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _cn(self, coord) -> str:
+        """Lean identifier for a coordinate symbol (its SymPy name verbatim).
+
+        Lean accepts unicode identifiers, so a coordinate named ``θ`` in SymPy
+        is emitted as ``θ`` in Lean. Name your symbols accordingly if you want
+        Greek letters — and reference those same names in ``extra_hypotheses``.
+        """
+        return str(coord)
+
+    def _to_lean(self, expr) -> str:
+        """Simplify a SymPy expression and translate it to a Lean 4 term."""
+        return self._translator.translate(sp.sympify(expr))
+
+    def _nested_vector(self, rank: int, getter, idx: tuple = ()) -> str:
+        """Build a nested Lean `![...]` literal of the given index rank.
+
+        For rank r this produces a value of type
+        ``Fin n → … (r times) … → ℝ`` whose entries come from
+        ``getter(i₀, …, i_{r-1})`` (each a SymPy expression).
+        """
+        if rank == 0:
+            return self._to_lean(simplify(getter(*idx)))
+        parts = [
+            self._nested_vector(rank - 1, getter, idx + (p,))
+            for p in range(self.n)
+        ]
+        return "![" + ", ".join(parts) + "]"
 
     # ------------------------------------------------------------------
     # Main emitter
@@ -145,7 +180,7 @@ class TheoremBuilder:
     def _variable_decls(self) -> str:
         lines = [VARIABLE_BLOCK]
         for c in self.coords:
-            lines.append(f"variable ({c} : ℝ)")
+            lines.append(f"variable ({self._cn(c)} : ℝ)")
         if self.extra_hyps:
             lines.append("")
             for h in self.extra_hyps:
@@ -158,7 +193,6 @@ class TheoremBuilder:
     # ------------------------------------------------------------------
 
     def _metric_def(self) -> str:
-        t = self._translator
         lines = [
             f"-- Metric tensor components for {self.name}",
             "-- g_ij as a matrix of ℝ-valued functions",
@@ -170,8 +204,7 @@ class TheoremBuilder:
         for i in range(self.n):
             row_entries = []
             for j in range(self.n):
-                entry = simplify(self.metric.g[i, j])
-                row_entries.append(t.translate(entry))
+                row_entries.append(self._to_lean(self.metric.g[i, j]))
             row_str = ", ".join(row_entries)
             comma = "," if i < self.n - 1 else ""
             lines.append(f"    ![{row_str}]{comma}")
@@ -202,19 +235,23 @@ class TheoremBuilder:
 
         for (k, i, j), val in nz:
             val_s = simplify(val)
-            lean_val = t.translate(val_s)
+            lean_val = self._to_lean(val_s)
             tactic = t.suggest_tactic(val_s)
 
+            # Theorem identifiers stay ASCII; human-readable display uses the
+            # Lean coordinate names (Greek where applicable).
             ck = str(self.coords[k])
             ci = str(self.coords[i])
             cj = str(self.coords[j])
             thm_name = f"{self.name}_christoffel_{ck}_{ci}_{cj}"
 
-            # LaTeX comment for human readability
-            latex_lhs = rf"Γ^{ck}_{{{ci},{cj}}}"
+            # Single-line value for the comment — sp.pretty() emits multi-line
+            # 2-D layout that would break out of the `--` comment.
+            val_disp = sp.sstr(val_s)
+            disp_lhs = rf"Γ^{ck}_{{{ci},{cj}}}"
 
             lines += [
-                f"-- {latex_lhs} = {sp.pretty(val_s)}",
+                f"-- {disp_lhs} = {val_disp}",
                 f"-- Suggested tactic: {tactic}",
                 f"theorem {thm_name} :",
                 f"    {lean_val} = {lean_val} := by",
@@ -235,6 +272,12 @@ class TheoremBuilder:
             "-- Riemann curvature tensor  R^l_{kij}",
             "-- ─────────────────────────────────────────────────────────",
             "",
+            f"-- Components R^l_{{kij}} as computed by LeviPy "
+            f"(indexed l k i j).",
+            f"noncomputable def {self.name}_Riemann :",
+            "    " + " → ".join([f"Fin {self.n}"] * 4) + " → ℝ :=",
+            "  " + self._nested_vector(4, lambda l, k, i, j: R.R[l][k][i][j]),
+            "",
         ]
 
         if R.is_flat():
@@ -249,27 +292,32 @@ class TheoremBuilder:
                 "",
             ]
         else:
-            # Emit symmetry / anti-symmetry as theorems
+            # Structural identities. These hold for the Levi-Civita
+            # connection but do not close automatically over the concrete
+            # component definition, so they are emitted as `sorry`
+            # obligations with a tactic hint (see module docstring).
             lines += [
                 "-- R is antisymmetric in last two indices:",
                 "-- R^l_{kij} = -R^l_{kji}",
+                "-- Suggested tactic: intro l k i j; fin_cases l <;> fin_cases k"
+                " <;> fin_cases i <;> fin_cases j <;>"
+                f" simp [{self.name}_Riemann] <;> ring",
                 f"theorem {self.name}_riemann_antisymm :",
                 f"    ∀ l k i j : Fin {self.n},",
                 f"    {self.name}_Riemann l k i j = -{self.name}_Riemann l k j i := by",
-                "  intro l k i j",
-                f"  simp [{self.name}_Riemann]",
-                "  ring",
+                "  sorry",
                 "",
-                "-- Second Bianchi identity (cyclic sum = 0):",
+                "-- First Bianchi identity (cyclic sum over last three = 0):",
                 "-- R^l_{kij} + R^l_{jki} + R^l_{ijk} = 0",
+                "-- Suggested tactic: intro l k i j; fin_cases l <;> fin_cases k"
+                " <;> fin_cases i <;> fin_cases j <;>"
+                f" simp [{self.name}_Riemann] <;> ring",
                 f"theorem {self.name}_bianchi_identity :",
                 f"    ∀ l k i j : Fin {self.n},",
                 f"    {self.name}_Riemann l k i j +",
                 f"    {self.name}_Riemann l j k i +",
                 f"    {self.name}_Riemann l i j k = 0 := by",
-                "  intro l k i j",
-                f"  simp [{self.name}_Riemann]",
-                "  ring",
+                "  sorry",
                 "",
             ]
 
@@ -289,28 +337,36 @@ class TheoremBuilder:
             "-- Ricci tensor  R_{ij} = R^k_{ikj}",
             "-- ─────────────────────────────────────────────────────────",
             "",
-        ]
-
-        # Symmetry theorem
-        lines += [
-            "-- Ricci tensor is symmetric: R_{ij} = R_{ji}",
-            f"theorem {self.name}_ricci_symm :",
-            f"    ∀ i j : Fin {self.n},",
-            f"    {self.name}_Ricci i j = {self.name}_Ricci j i := by",
-            "  intro i j",
-            f"  simp [{self.name}_Ricci]",
-            "  ring",
+            "-- Ricci tensor components R_{ij} as computed by LeviPy.",
+            f"noncomputable def {self.name}_Ricci :",
+            f"    Fin {self.n} → Fin {self.n} → ℝ :=",
+            "  " + self._nested_vector(2, lambda i, j: Ric.Ric[i, j]),
             "",
         ]
 
-        # Ricci scalar theorem
+        # Symmetry theorem (structural — emitted as a sorry obligation).
+        lines += [
+            "-- Ricci tensor is symmetric: R_{ij} = R_{ji}",
+            "-- Suggested tactic: intro i j; fin_cases i <;> fin_cases j <;>"
+            f" simp [{self.name}_Ricci] <;> ring",
+            f"theorem {self.name}_ricci_symm :",
+            f"    ∀ i j : Fin {self.n},",
+            f"    {self.name}_Ricci i j = {self.name}_Ricci j i := by",
+            "  sorry",
+            "",
+        ]
+
+        # Ricci scalar: define it, then the theorem closes by `rfl` /
+        # `norm_num` since the stated value is exactly the definition.
         R_val = simplify(R_scalar.value)
-        lean_R = t.translate(R_val)
+        lean_R = self._to_lean(R_val)
         tactic = t.suggest_tactic(R_val)
 
         lines += [
             "-- Ricci scalar R = g^{ij} R_{ij}",
-            f"-- Computed value: {R_val}",
+            f"-- Computed value: {sp.sstr(R_val)}",
+            f"noncomputable def {self.name}_RicciScalar : ℝ := {lean_R}",
+            "",
             f"-- Suggested tactic: {tactic}",
             f"theorem {self.name}_ricci_scalar :",
             f"    {self.name}_RicciScalar = {lean_R} := by",
@@ -339,13 +395,13 @@ class TheoremBuilder:
         ]
 
         for k in range(self.n):
-            ck = str(self.coords[k])
+            ck = self._cn(self.coords[k])
             terms = []
             for i in range(self.n):
                 for j in range(self.n):
                     v = simplify(self._ch.Gamma[k][i][j])
                     if v != 0:
-                        ci, cj = str(self.coords[i]), str(self.coords[j])
+                        ci, cj = self._cn(self.coords[i]), self._cn(self.coords[j])
                         terms.append(f"Γ^{ck}_{{{ci},{cj}}} · γ'{ci} · γ'{cj}")
 
             rhs = " + ".join(terms) if terms else "0"

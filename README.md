@@ -135,14 +135,15 @@ Three components make up the bridge:
 import sympy as sp
 from levipy import Manifold, TheoremBuilder
 
-theta, phi = sp.symbols('theta phi', real=True)
+# Name the symbols in Greek so the generated Lean uses θ, φ identifiers
+theta, phi = sp.symbols('θ φ', real=True)
 M = Manifold('S2', coords=[theta, phi])
 g = M.metric([[1, 0], [0, sp.sin(theta)**2]])
 
 builder = TheoremBuilder(
     g,
     manifold_name='Sphere2',
-    extra_hypotheses=['(hth : 0 < θ)', '(hth2 : θ < π)'],
+    extra_hypotheses=['(hth : 0 < θ)', '(hth2 : θ < π)'],  # must match the symbol names
 )
 builder.save('Sphere2.lean')   # writes a Lean 4 source file
 ```
