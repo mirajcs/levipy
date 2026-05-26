@@ -1,8 +1,10 @@
 [project]
 name = "levipy"
 version = "0.1.0"
-description = "Add your description here"
+description = "Symbolic differential geometry and general relativity in SymPy, with a Lean 4 formal-verification bridge."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "sympy>=1.14.0",
