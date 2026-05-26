@@ -148,8 +148,14 @@ builder = TheoremBuilder(
 builder.save('Sphere2.lean')   # writes a Lean 4 source file
 ```
 
-The companion Lean project lives in [`lean/`](lean/) (a Lake project pinned to
-a Mathlib toolchain). Lower-level pieces are also available:
+> **Note for `pip install` users:** the PyPI package ships the Python bridge
+> (which *generates* `.lean` files), but not the companion Lean project itself.
+> To build and check the generated proofs, clone the
+> [GitHub repository](https://github.com/mirajcs/levipy) — the Lean Lake
+> project lives in [`lean/`](https://github.com/mirajcs/levipy/tree/main/lean)
+> (pinned to a Mathlib toolchain).
+
+Lower-level pieces are also available:
 
 ```python
 from levipy import SymPyToLean4, MathlibLinker
