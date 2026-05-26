@@ -6,9 +6,39 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
+authors = [
+    { name = "Miraj Samarakkody", email = "miraj.samarakkody@gmail.com" },
+]
+keywords = [
+    "differential-geometry",
+    "general-relativity",
+    "sympy",
+    "symbolic",
+    "tensor",
+    "lean4",
+    "formal-verification",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
     "sympy>=1.14.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mirajcs/levipy"
+Repository = "https://github.com/mirajcs/levipy"
+Issues = "https://github.com/mirajcs/levipy/issues"
+
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["levipy*"]
